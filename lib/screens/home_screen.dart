@@ -25,11 +25,20 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = false;
   String? _error;
   final List<DemoSubscription> _subscriptions = [];
+  final _imapLoginController = TextEditingController();
+  final _imapPasswordController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _seedDemoSubscriptions();
+  }
+
+  @override
+  void dispose() {
+    _imapLoginController.dispose();
+    _imapPasswordController.dispose();
+    super.dispose();
   }
 
   void _seedDemoSubscriptions() {
@@ -53,6 +62,12 @@ class _HomeScreenState extends State<HomeScreen> {
           status: 'active',
         ),
       ]);
+  }
+
+  void _removeSubscription(DemoSubscription subscription) {
+    setState(() {
+      _subscriptions.remove(subscription);
+    });
   }
 
   Future<void> _loadSubscriptions() async {
@@ -98,37 +113,83 @@ class _HomeScreenState extends State<HomeScreen> {
       _loading = true;
       _error = null;
     });
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+
+    final imapLogin = _imapLoginController.text.trim();
+    final imapPassword = _imapPasswordController.text;
+    final parsed = <DemoSubscription>[];
+
+    if (imapLogin.isNotEmpty && imapPassword.isNotEmpty) {
+      try {
+        final response = await widget.apiClient.importFromImap(imapLogin, imapPassword);
+
+        for (final entry in response.entries) {
+          final name = entry.key;
+          final item = entry.value;
+          if (item is Map<String, dynamic>) {
+            final cost = item['cost'];
+            final nextPay = item['next_pay'];
+            final price = cost != null ? double.tryParse(cost.toString()) ?? 0.0 : 0.0;
+            final nextDate = _dateFromList(nextPay);
+            if (price > 0) {
+              parsed.add(DemoSubscription(
+                name: name,
+                price: price,
+                billingPeriod: 'monthly',
+                nextBillingDate: nextDate,
+                category: 'Imported',
+                status: 'active',
+              ));
+            }
+          }
+        }
+      } catch (e) {
+        _error = e.toString();
+      }
+    } else {
+      _error = 'Введите логин и пароль IMAP для импорта.';
+    }
+
     if (!mounted) {
       return;
     }
+
     setState(() {
-      _subscriptions.addAll([
-        DemoSubscription(
-          name: 'YouTube Premium',
-          price: 249,
-          billingPeriod: 'monthly',
-          nextBillingDate: DateTime.now().add(const Duration(days: 23)),
-          category: 'Video',
-          status: 'active',
-        ),
-      ]);
+      if (parsed.isEmpty) {
+        _error ??= 'Не удалось извлечь подписки из письма.';
+      } else {
+        _subscriptions.addAll(parsed);
+        _error = null;
+      }
       _loading = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Импорт завершен: добавлена 1 подписка')),
-    );
+
+    if (parsed.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Импорт завершен: добавлено ${parsed.length} подписок')),
+      );
+    }
+  }
+
+  DateTime _dateFromList(dynamic value) {
+    if (value is List && value.length >= 3) {
+      final year = int.tryParse(value[0]?.toString() ?? '') ?? DateTime.now().year;
+      final month = int.tryParse(value[1]?.toString() ?? '') ?? 1;
+      final day = int.tryParse(value[2]?.toString() ?? '') ?? 1;
+      return DateTime(year, month, day);
+    }
+    return DateTime.now().add(const Duration(days: 30));
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      ProfileView(user: widget.user, onLogout: widget.onLogout),
+      ProfileView(apiClient: widget.apiClient, user: widget.user, onLogout: widget.onLogout),
       SubscriptionList(
         subscriptions: _subscriptions,
         loading: _loading,
         error: _error,
         onRefresh: _loadSubscriptions,
+        onRemove: _removeSubscription,
       ),
       AddSubscriptionForm(
         onSave: _addSubscription,
@@ -137,6 +198,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ImportSubscriptions(
         onImport: _importFromEmail,
         loading: _loading,
+        imapLoginController: _imapLoginController,
+        imapPasswordController: _imapPasswordController,
       ),
     ];
 
@@ -185,11 +248,41 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class ProfileView extends StatelessWidget {
-  const ProfileView({super.key, required this.user, required this.onLogout});
+class ProfileView extends StatefulWidget {
+  const ProfileView({super.key, required this.apiClient, required this.user, required this.onLogout});
 
+  final ApiClient apiClient;
   final UserProfile user;
   final VoidCallback onLogout;
+
+  @override
+  State<ProfileView> createState() => _ProfileViewState();
+}
+
+class _ProfileViewState extends State<ProfileView> {
+  String? _findByEmailResult;
+  bool _loading = false;
+
+  Future<void> _findByEmail() async {
+    setState(() {
+      _loading = true;
+      _findByEmailResult = null;
+    });
+    try {
+      final found = await widget.apiClient.getUserByEmail(widget.user.email);
+      setState(() {
+        _findByEmailResult = 'Найден пользователь: ${found.name} (${found.email})';
+      });
+    } catch (e) {
+      setState(() {
+        _findByEmailResult = 'Ошибка: $e';
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -207,17 +300,29 @@ class ProfileView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _InfoRow(label: 'ID', value: user.id.toString()),
+                _InfoRow(label: 'ID', value: widget.user.id.toString()),
                 const SizedBox(height: 8),
-                _InfoRow(label: 'Имя', value: user.name),
+                _InfoRow(label: 'Имя', value: widget.user.name),
                 const SizedBox(height: 8),
-                _InfoRow(label: 'Username', value: user.username ?? '—'),
+                _InfoRow(label: 'Username', value: widget.user.username ?? '—'),
                 const SizedBox(height: 8),
-                _InfoRow(label: 'Email', value: user.email),
+                _InfoRow(label: 'Email', value: widget.user.email),
               ],
             ),
           ),
         ),
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: _loading ? null : _findByEmail,
+          child: _loading
+              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Проверить по email'),
+        ),
+        if (_findByEmailResult != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_findByEmailResult!),
+          ),
       ],
     );
   }
@@ -261,12 +366,14 @@ class SubscriptionList extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.onRefresh,
+    this.onRemove,
   });
 
   final List<DemoSubscription> subscriptions;
   final bool loading;
   final String? error;
   final Future<void> Function() onRefresh;
+  final ValueChanged<DemoSubscription>? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -306,7 +413,10 @@ class SubscriptionList extends StatelessWidget {
                 ),
               ),
             ),
-          ...subscriptions.map((subscription) => SubscriptionCard(subscription)),
+          ...subscriptions.map((subscription) => SubscriptionCard(
+                subscription,
+                onRemove: onRemove,
+              )),
         ],
       ),
     );
@@ -314,9 +424,14 @@ class SubscriptionList extends StatelessWidget {
 }
 
 class SubscriptionCard extends StatelessWidget {
-  const SubscriptionCard(this.subscription, {super.key});
+  const SubscriptionCard(
+    this.subscription, {
+    super.key,
+    this.onRemove,
+  });
 
   final DemoSubscription subscription;
+  final ValueChanged<DemoSubscription>? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -327,15 +442,28 @@ class SubscriptionCard extends StatelessWidget {
         subtitle: Text(
           '${subscription.category} • ${subscription.billingPeriod}',
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text('${subscription.price.toStringAsFixed(2)} RUB'),
-            Text(
-              formatter.format(subscription.nextBillingDate),
-              style: Theme.of(context).textTheme.bodySmall,
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('${subscription.price.toStringAsFixed(2)} RUB'),
+                Text(
+                  formatter.format(subscription.nextBillingDate),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
+            if (onRemove != null) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Удалить',
+                onPressed: () => onRemove!(subscription),
+              ),
+            ],
           ],
         ),
       ),
@@ -550,10 +678,18 @@ class _AddSubscriptionFormState extends State<AddSubscriptionForm> {
 }
 
 class ImportSubscriptions extends StatelessWidget {
-  const ImportSubscriptions({super.key, required this.onImport, required this.loading});
+  const ImportSubscriptions({
+    super.key,
+    required this.onImport,
+    required this.loading,
+    required this.imapLoginController,
+    required this.imapPasswordController,
+  });
 
   final Future<void> Function() onImport;
   final bool loading;
+  final TextEditingController imapLoginController;
+  final TextEditingController imapPasswordController;
 
   @override
   Widget build(BuildContext context) {
@@ -568,9 +704,26 @@ class ImportSubscriptions extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           const Text(
-            'В демо-версии функция импорта не реализована. В реальном приложении здесь будет происходить анализ писем и добавление подписок на их основе. ///',
+            'Импортировать подписки по IMAP (логин/пароль).',
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          TextField(
+            controller: imapLoginController,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              labelText: 'IMAP login (email)',
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: imapPasswordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              labelText: 'IMAP password',
+            ),
+          ),
+          const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: loading ? null : onImport,
             icon: const Icon(Icons.play_arrow),

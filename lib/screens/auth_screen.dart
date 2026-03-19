@@ -17,12 +17,14 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
   bool _isLogin = true;
   bool _loading = false;
   String? _error;
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -39,9 +41,10 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
+      final name = _nameController.text.trim();
       final result = _isLogin
           ? await widget.apiClient.login(email, password)
-          : await widget.apiClient.register(email, password);
+          : await widget.apiClient.register(name, email, password);
       widget.onAuth(result);
     } on ApiException catch (e) {
       setState(() {
@@ -88,16 +91,32 @@ class _AuthScreenState extends State<AuthScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
+                        if (!_isLogin) ...[
+                          TextFormField(
+                            controller: _nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Имя',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Введите имя';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
                           decoration: const InputDecoration(
-                            labelText: 'Email',
+                            labelText: 'Логин',
                             border: OutlineInputBorder(),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Введите email';
+                              return 'Введите логин';
                             }
                             return null;
                           },

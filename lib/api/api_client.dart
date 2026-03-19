@@ -6,7 +6,12 @@ import 'package:http/http.dart' as http;
 import '../models.dart';
 
 class ApiConfig {
+  static const String _envBaseUrl = String.fromEnvironment('API_BASE_URL');
+
   static String defaultBaseUrl() {
+    if (_envBaseUrl.isNotEmpty) {
+      return _envBaseUrl;
+    }
     if (kIsWeb) {
       return 'http://192.168.0.19:8000';
     }
@@ -15,8 +20,7 @@ class ApiConfig {
 }
 
 class ApiClient {
-  ApiClient({String? baseUrl})
-    : _baseUrl = baseUrl ?? ApiConfig.defaultBaseUrl();
+  ApiClient({String? baseUrl}) : _baseUrl = baseUrl ?? ApiConfig.defaultBaseUrl();
 
   final String _baseUrl;
   String? _token;
@@ -25,8 +29,7 @@ class ApiClient {
     _token = token;
   }
 
-  Future<AuthResult> register(String email, String password) async {
-    final name = email.split('@').first;
+  Future<AuthResult> register(String name, String email, String password) async {
     await _post(
       '/users/register',
       body: {
@@ -73,6 +76,31 @@ class ApiClient {
     );
     final json = _decode(response);
     return UserProfile.fromJson(json);
+  }
+
+  Future<UserProfile> getUserByEmail(String email) async {
+    final uri = Uri.parse('$_baseUrl/users/getByEmail/$email');
+    final response = await http.get(
+      uri,
+      headers: _headers(),
+    );
+    final json = _decode(response);
+    return UserProfile.fromJson(json);
+  }
+
+  Future<Map<String, dynamic>> importFromImap(String login, String password) async {
+    final uri = Uri.parse('$_baseUrl/users/import-from-imap');
+    final response = await http.post(
+      uri,
+      headers: _headers(),
+      body: jsonEncode({'login': login, 'password': password}),
+    );
+    final json = _decode(response);
+    final data = json['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return <String, dynamic>{};
   }
 
   Future<http.Response> _post(String path, {Map<String, dynamic>? body}) async {
