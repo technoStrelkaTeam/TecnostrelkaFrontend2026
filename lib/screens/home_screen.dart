@@ -31,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _seedDemoSubscriptions();
   }
 
   @override
@@ -41,28 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _seedDemoSubscriptions() {
-    _subscriptions
-      ..clear()
-      ..addAll([
-        DemoSubscription(
-          name: 'Netflix',
-          price: 599,
-          billingPeriod: 'monthly',
-          nextBillingDate: DateTime.now().add(const Duration(days: 7)),
-          category: 'Streaming',
-          status: 'active',
-        ),
-        DemoSubscription(
-          name: 'Spotify',
-          price: 199,
-          billingPeriod: 'monthly',
-          nextBillingDate: DateTime.now().add(const Duration(days: 15)),
-          category: 'Music',
-          status: 'active',
-        ),
-      ]);
-  }
+  
 
   void _removeSubscription(DemoSubscription subscription) {
     setState(() {
