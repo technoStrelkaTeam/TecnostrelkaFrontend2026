@@ -33,29 +33,33 @@ class Subscription {
   final String name;
   final double price;
   final String billingPeriod;
+  final int interval;
   final DateTime nextBillingDate;
   final String category;
-  final String status;
 
   Subscription({
     this.id,
     required this.name,
     required this.price,
     required this.billingPeriod,
+    required this.interval,
     required this.nextBillingDate,
     required this.category,
-    required this.status,
   });
 
   factory Subscription.fromJson(Map<String, dynamic> json) {
+    final rawPeriod = (json['type_interval'] ?? json['billing_period']) as String;
+    final normalizedPeriod = _normalizeBillingPeriod(rawPeriod);
     return Subscription(
       id: json['id'] as int?,
       name: json['name'] as String,
-      price: (json['cost'] as num).toDouble(),
-      billingPeriod: json['type_interval'] as String,
-      nextBillingDate: DateTime.parse(json['next_pay'] as String),
+      price: ((json['cost'] ?? json['price']) as num).toDouble(),
+      billingPeriod: normalizedPeriod,
+      interval: (json['interval'] ?? 1) as int,
+      nextBillingDate: DateTime.parse(
+        (json['next_pay'] ?? json['next_billing_date']) as String,
+      ),
       category: json['category'] as String,
-      status: 'Активная',
     );
   }
 
@@ -63,12 +67,25 @@ class Subscription {
     return {
       'id': id,
       'name': name,
-      'price': price,
-      'billing_period': billingPeriod,
-      'next_billing_date': nextBillingDate.toIso8601String(),
+      'cost': price,
+      'type_interval': billingPeriod,
+      'interval': interval,
+      'next_pay': nextBillingDate.toIso8601String(),
       'category': category,
-      'status': status,
     };
+  }
+
+  static String _normalizeBillingPeriod(String value) {
+    switch (value) {
+      case 'monthly':
+        return 'month';
+      case 'yearly':
+        return 'year';
+      case 'weekly':
+        return 'week';
+      default:
+        return value;
+    }
   }
 }
 
@@ -76,16 +93,16 @@ class SubscriptionDraft {
   final String name;
   final double price;
   final String billingPeriod;
+  final int interval;
   final DateTime nextBillingDate;
   final String category;
-  final String status;
 
   SubscriptionDraft({
     required this.name,
     required this.price,
     required this.billingPeriod,
+    required this.interval,
     required this.nextBillingDate,
     required this.category,
-    required this.status,
   });
 }

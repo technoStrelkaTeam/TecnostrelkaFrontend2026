@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import '../api/api_client.dart';
 import '../models.dart';
+import '../services/notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   bool _loading = false;
   String? _error;
+  String? _importError;
   final List<Subscription> _subscriptions = [];
   final _imapLoginController = TextEditingController();
   final _imapPasswordController = TextEditingController();
@@ -58,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
         subscriptionsJson.map((json) => Subscription.fromJson(jsonDecode(json))),
       );
     });
+    await _scheduleNotifications();
   }
 
   Future<void> _saveSubscriptionsToLocal() async {
@@ -74,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _subscriptions.addAll(serverSubscriptions);
       });
       await _saveSubscriptionsToLocal();
+      await _scheduleNotifications();
     } catch (e) {
       // If server fails, keep local data
     }
@@ -86,9 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
           name: subscription.name,
           price: subscription.price,
           billingPeriod: subscription.billingPeriod,
+          interval: subscription.interval,
           nextBillingDate: subscription.nextBillingDate,
           category: subscription.category,
-          status: subscription.status,
         ));
         setState(() {
           final index = _subscriptions.indexWhere((s) => s == subscription);
@@ -101,9 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
           name: subscription.name,
           price: subscription.price,
           billingPeriod: subscription.billingPeriod,
+          interval: subscription.interval,
           nextBillingDate: subscription.nextBillingDate,
           category: subscription.category,
-          status: subscription.status,
         ));
       }
     } catch (e) {
@@ -127,13 +131,14 @@ class _HomeScreenState extends State<HomeScreen> {
           name: result.name,
           price: result.price,
           billingPeriod: result.billingPeriod,
+          interval: result.interval,
           nextBillingDate: result.nextBillingDate,
           category: result.category,
-          status: result.status,
         );
         _subscriptions[index] = updated;
         await _saveSubscriptionsToLocal();
         await _syncSubscriptionToServer(updated);
+        await _scheduleNotifications();
       }
       setState(() {
         _loading = false;
@@ -154,12 +159,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (subscription.id != null) {
       try {
         await widget.apiClient.deleteSubscription(subscription.id!);
+        await _scheduleNotifications();
       } catch (e) {
         // Re-add if server fails
         setState(() {
           _subscriptions.add(subscription);
         });
         await _saveSubscriptionsToLocal();
+        await _scheduleNotifications();
       }
     }
   }
@@ -191,9 +198,9 @@ class _HomeScreenState extends State<HomeScreen> {
       name: draft.name,
       price: draft.price,
       billingPeriod: draft.billingPeriod,
+      interval: draft.interval,
       nextBillingDate: draft.nextBillingDate,
       category: draft.category,
-      status: draft.status,
     );
     setState(() {
       _subscriptions.add(subscription);
@@ -201,12 +208,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     await _saveSubscriptionsToLocal();
     await _syncSubscriptionToServer(subscription);
+    await _scheduleNotifications();
   }
 
   Future<void> _importFromEmail() async {
     setState(() {
       _loading = true;
-      _error = null;
+      _importError = null;
     });
 
     final imapLogin = _imapLoginController.text.trim();
@@ -226,22 +234,30 @@ class _HomeScreenState extends State<HomeScreen> {
             final price = cost != null ? double.tryParse(cost.toString()) ?? 0.0 : 0.0;
             final nextDate = _dateFromList(nextPay);
             if (price > 0) {
-              parsed.add(Subscription(
+              final draft = SubscriptionDraft(
                 name: name,
                 price: price,
-                billingPeriod: 'monthly',
+                billingPeriod: 'month',
+                interval: 1,
                 nextBillingDate: nextDate,
                 category: 'Imported',
-                status: 'active',
+              );
+              parsed.add(Subscription(
+                name: draft.name,
+                price: draft.price,
+                billingPeriod: draft.billingPeriod,
+                interval: draft.interval,
+                nextBillingDate: draft.nextBillingDate,
+                category: draft.category,
               ));
             }
           }
         }
       } catch (e) {
-        _error = e.toString();
+        _importError = e.toString();
       }
     } else {
-      _error = 'Введите логин и пароль IMAP для импорта.';
+      _importError = 'Введите логин и пароль IMAP для импорта.';
     }
 
     if (!mounted) {
@@ -250,19 +266,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       if (parsed.isEmpty) {
-        _error ??= 'Не удалось извлечь подписки из письма.';
+        _importError ??= 'Не удалось извлечь подписки из письма.';
       } else {
         _subscriptions.addAll(parsed);
-        _error = null;
+        _importError = null;
       }
       _loading = false;
     });
 
     if (parsed.isNotEmpty) {
+      await _saveSubscriptionsToLocal();
+      for (final subscription in parsed) {
+        await _syncSubscriptionToServer(subscription);
+      }
+      await _scheduleNotifications();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Импорт завершен: добавлено ${parsed.length} подписок')),
       );
     }
+  }
+
+  Future<void> _scheduleNotifications() async {
+    await NotificationService.instance.scheduleForSubscriptions(_subscriptions);
   }
 
   DateTime _dateFromList(dynamic value) {
@@ -296,6 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ImportSubscriptions(
         onImport: _importFromEmail,
         loading: _loading,
+        error: _importError,
         imapLoginController: _imapLoginController,
         imapPasswordController: _imapPasswordController,
       ),
@@ -644,9 +670,8 @@ class _AddSubscriptionFormState extends State<AddSubscriptionForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
-  final _categoryController = TextEditingController(text: 'Streaming');
-  String _billingPeriod = 'monthly';
-  String _status = 'active';
+  final _categoryController = TextEditingController();
+  String _billingPeriod = 'month';
   DateTime _nextBillingDate = DateTime.now().add(const Duration(days: 30));
 
   @override
@@ -672,11 +697,11 @@ class _AddSubscriptionFormState extends State<AddSubscriptionForm> {
       name: _nameController.text.trim(),
       price: price,
       billingPeriod: _billingPeriod,
+      interval: 1,
       nextBillingDate: _nextBillingDate,
       category: _categoryController.text.trim().isEmpty
           ? 'Other'
           : _categoryController.text.trim(),
-      status: _status,
     );
     await widget.onSave(draft);
     if (!mounted) {
@@ -690,8 +715,7 @@ class _AddSubscriptionFormState extends State<AddSubscriptionForm> {
     _priceController.clear();
     _categoryController.text = 'Streaming';
     setState(() {
-      _billingPeriod = 'monthly';
-      _status = 'active';
+      _billingPeriod = 'month';
       _nextBillingDate = DateTime.now().add(const Duration(days: 30));
     });
   }
@@ -769,9 +793,9 @@ class _AddSubscriptionFormState extends State<AddSubscriptionForm> {
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'monthly', child: Text('Ежемесячно')),
-                  DropdownMenuItem(value: 'yearly', child: Text('Ежегодно')),
-                  DropdownMenuItem(value: 'weekly', child: Text('Еженедельно')),
+                  DropdownMenuItem(value: 'month', child: Text('Ежемесячно')),
+                  DropdownMenuItem(value: 'year', child: Text('Ежегодно')),
+                  DropdownMenuItem(value: 'week', child: Text('Еженедельно')),
                 ],
                 onChanged: widget.loading
                     ? null
@@ -779,28 +803,6 @@ class _AddSubscriptionFormState extends State<AddSubscriptionForm> {
                         if (value != null) {
                           setState(() {
                             _billingPeriod = value;
-                          });
-                        }
-                      },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Статус подписки',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'active', child: Text('Активная')),
-                  DropdownMenuItem(value: 'paused', child: Text('Пауза')),
-                  DropdownMenuItem(value: 'canceled', child: Text('Отменена')),
-                ],
-                onChanged: widget.loading
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          setState(() {
-                            _status = value;
                           });
                         }
                       },
@@ -944,7 +946,6 @@ class _EditSubscriptionDialogState extends State<EditSubscriptionDialog> {
   late final TextEditingController _priceController;
   late final TextEditingController _categoryController;
   late String _billingPeriod;
-  late String _status;
   late DateTime _nextBillingDate;
 
   @override
@@ -954,7 +955,6 @@ class _EditSubscriptionDialogState extends State<EditSubscriptionDialog> {
     _priceController = TextEditingController(text: widget.subscription.price.toString());
     _categoryController = TextEditingController(text: widget.subscription.category);
     _billingPeriod = widget.subscription.billingPeriod;
-    _status = widget.subscription.status;
     _nextBillingDate = widget.subscription.nextBillingDate;
   }
 
@@ -1007,8 +1007,8 @@ class _EditSubscriptionDialogState extends State<EditSubscriptionDialog> {
                 value: _billingPeriod,
                 decoration: const InputDecoration(labelText: 'Период оплаты'),
                 items: const [
-                  DropdownMenuItem(value: 'monthly', child: Text('Ежемесячно')),
-                  DropdownMenuItem(value: 'yearly', child: Text('Ежегодно')),
+                  DropdownMenuItem(value: 'month', child: Text('Ежемесячно')),
+                  DropdownMenuItem(value: 'year', child: Text('Ежегодно')),
                 ],
                 onChanged: (value) {
                   if (value != null) {
@@ -1022,22 +1022,6 @@ class _EditSubscriptionDialogState extends State<EditSubscriptionDialog> {
               TextFormField(
                 controller: _categoryController,
                 decoration: const InputDecoration(labelText: 'Категория'),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _status,
-                decoration: const InputDecoration(labelText: 'Статус'),
-                items: const [
-                  DropdownMenuItem(value: 'active', child: Text('Активная')),
-                  DropdownMenuItem(value: 'inactive', child: Text('Неактивная')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _status = value;
-                    });
-                  }
-                },
               ),
             ],
           ),
@@ -1056,11 +1040,11 @@ class _EditSubscriptionDialogState extends State<EditSubscriptionDialog> {
                 name: _nameController.text.trim(),
                 price: price,
                 billingPeriod: _billingPeriod,
+                interval: widget.subscription.interval,
                 nextBillingDate: _nextBillingDate,
                 category: _categoryController.text.trim().isEmpty
                     ? 'Other'
                     : _categoryController.text.trim(),
-                status: _status,
               ));
             }
           },
@@ -1076,12 +1060,14 @@ class ImportSubscriptions extends StatelessWidget {
     super.key,
     required this.onImport,
     required this.loading,
+    required this.error,
     required this.imapLoginController,
     required this.imapPasswordController,
   });
 
   final Future<void> Function() onImport;
   final bool loading;
+  final String? error;
   final TextEditingController imapLoginController;
   final TextEditingController imapPasswordController;
 
@@ -1118,6 +1104,13 @@ class ImportSubscriptions extends StatelessWidget {
               labelText: 'IMAP password',
             ),
           ),
+          if (error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: loading ? null : onImport,
