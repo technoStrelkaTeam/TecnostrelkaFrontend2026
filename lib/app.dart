@@ -31,6 +31,12 @@ class _SubscriptionAppState extends State<SubscriptionApp> {
     });
   }
 
+  void _handleUserUpdate(UserProfile updatedUser) {
+    setState(() {
+      _user = updatedUser;
+    });
+  }
+
   void _handleLogout() {
     setState(() {
       _user = null;
@@ -47,13 +53,20 @@ class _SubscriptionAppState extends State<SubscriptionApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.system,
       home: _token == null
           ? AuthScreen(apiClient: _apiClient, onAuth: _handleAuth)
           : HomeScreen(
               apiClient: _apiClient,
               user: _user!,
-              onLogout: _handleLogout,
-            ),
+              onLogout: _handleLogout,              onUserUpdate: _handleUserUpdate,            ),
     );
   }
 }

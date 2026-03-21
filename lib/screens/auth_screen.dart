@@ -109,14 +109,17 @@ class _AuthScreenState extends State<AuthScreen> {
                         ],
                         TextFormField(
                           controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
-                            labelText: 'Логин',
-                            border: OutlineInputBorder(),
+                          keyboardType: _isLogin ? TextInputType.text : TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            labelText: _isLogin ? 'Логин или Email' : 'Email',
+                            border: const OutlineInputBorder(),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Введите логин';
+                              return _isLogin ? 'Введите логин или email' : 'Введите email';
+                            }
+                            if (!_isLogin && !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                              return 'Введите корректный email';
                             }
                             return null;
                           },

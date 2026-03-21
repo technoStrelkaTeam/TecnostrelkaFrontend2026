@@ -27,3 +27,65 @@ class AuthResult {
 
   AuthResult({required this.token, required this.user});
 }
+
+class Subscription {
+  final int? id;
+  final String name;
+  final double price;
+  final String billingPeriod;
+  final DateTime nextBillingDate;
+  final String category;
+  final String status;
+
+  Subscription({
+    this.id,
+    required this.name,
+    required this.price,
+    required this.billingPeriod,
+    required this.nextBillingDate,
+    required this.category,
+    required this.status,
+  });
+
+  factory Subscription.fromJson(Map<String, dynamic> json) {
+    return Subscription(
+      id: json['id'] as int?,
+      name: json['name'] as String,
+      price: (json['price'] as num).toDouble(),
+      billingPeriod: json['billing_period'] as String,
+      nextBillingDate: DateTime.parse(json['next_billing_date'] as String),
+      category: json['category'] as String,
+      status: json['status'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'price': price,
+      'billing_period': billingPeriod,
+      'next_billing_date': nextBillingDate.toIso8601String(),
+      'category': category,
+      'status': status,
+    };
+  }
+}
+
+class SubscriptionDraft {
+  final String name;
+  final double price;
+  final String billingPeriod;
+  final DateTime nextBillingDate;
+  final String category;
+  final String status;
+
+  SubscriptionDraft({
+    required this.name,
+    required this.price,
+    required this.billingPeriod,
+    required this.nextBillingDate,
+    required this.category,
+    required this.status,
+  });
+}

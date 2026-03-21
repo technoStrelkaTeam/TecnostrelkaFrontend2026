@@ -103,6 +103,63 @@ class ApiClient {
     return <String, dynamic>{};
   }
 
+  Future<UserProfile> updateProfile(String name, String email) async {
+    final uri = Uri.parse('$_baseUrl/users/me');
+    final response = await http.put(
+      uri,
+      headers: _headers(),
+      body: jsonEncode({'name': name, 'email': email}),
+    );
+    final json = _decode(response);
+    return UserProfile.fromJson(json);
+  }
+
+  Future<List<Subscription>> getSubscriptions() async {
+    final uri = Uri.parse('$_baseUrl/subscribes/me');
+    final response = await http.get(uri, headers: _headers());
+    final decoded = jsonDecode(response.body) as List<dynamic>;
+    return decoded.map((e) => Subscription.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<Subscription> createSubscription(SubscriptionDraft draft) async {
+    final uri = Uri.parse('$_baseUrl/subscribes/me');
+    final response = await http.post(
+      uri,
+      headers: _headers(),
+      body: jsonEncode({
+        'name': draft.name,
+        'price': draft.price,
+        'billing_period': draft.billingPeriod,
+        'next_billing_date': draft.nextBillingDate.toIso8601String(),
+        'category': draft.category,
+        'status': draft.status,
+      }),
+    );
+    final json = _decode(response);
+    return Subscription.fromJson(json);
+  }
+
+  Future<void> updateSubscription(int id, SubscriptionDraft draft) async {
+    final uri = Uri.parse('$_baseUrl/subscribes/me/$id');
+    await http.put(
+      uri,
+      headers: _headers(),
+      body: jsonEncode({
+        'name': draft.name,
+        'price': draft.price,
+        'billing_period': draft.billingPeriod,
+        'next_billing_date': draft.nextBillingDate.toIso8601String(),
+        'category': draft.category,
+        'status': draft.status,
+      }),
+    );
+  }
+
+  Future<void> deleteSubscription(int id) async {
+    final uri = Uri.parse('$_baseUrl/subscribes/me/$id');
+    await http.delete(uri, headers: _headers());
+  }
+
   Future<http.Response> _post(String path, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$_baseUrl$path');
     final headers = _headers();
