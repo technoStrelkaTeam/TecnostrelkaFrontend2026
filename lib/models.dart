@@ -51,11 +51,11 @@ class Subscription {
     return Subscription(
       id: json['id'] as int?,
       name: json['name'] as String,
-      price: (json['price'] as num).toDouble(),
-      billingPeriod: json['billing_period'] as String,
-      nextBillingDate: DateTime.parse(json['next_billing_date'] as String),
+      price: (json['cost'] as num).toDouble(),
+      billingPeriod: json['type_interval'] as String,
+      nextBillingDate: DateTime.parse(json['next_pay'] as String),
       category: json['category'] as String,
-      status: json['status'] as String,
+      status: 'Активная',
     );
   }
 

@@ -128,11 +128,11 @@ class ApiClient {
       headers: _headers(),
       body: jsonEncode({
         'name': draft.name,
-        'price': draft.price,
-        'billing_period': draft.billingPeriod,
-        'next_billing_date': draft.nextBillingDate.toIso8601String(),
+        'cost': draft.price,
+        'type_interval': draft.billingPeriod,
+        'interval': 1,
+        'next_pay': draft.nextBillingDate.toIso8601String(),
         'category': draft.category,
-        'status': draft.status,
       }),
     );
     final json = _decode(response);
