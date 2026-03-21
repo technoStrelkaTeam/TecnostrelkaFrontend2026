@@ -29,17 +29,17 @@ class ApiClient {
     _token = token;
   }
 
-  Future<AuthResult> register(String name, String email, String password) async {
+  Future<AuthResult> register(String name, String username, String email, String password) async {
     await _post(
       '/users/register',
       body: {
         'name': name,
-        'username': email,
+        'username': username,
         'email': email,
         'password': password,
       },
     );
-    final token = await _requestToken(email, password);
+    final token = await _requestToken(username, password);
     final user = await _fetchMe(token: token);
     return AuthResult(token: token, user: user);
   }

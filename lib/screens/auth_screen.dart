@@ -18,6 +18,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
   bool _isLogin = true;
   bool _loading = false;
   String? _error;
@@ -25,6 +26,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -42,9 +44,10 @@ class _AuthScreenState extends State<AuthScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
       final name = _nameController.text.trim();
+      final username = _usernameController.text.trim();
       final result = _isLogin
           ? await widget.apiClient.login(email, password)
-          : await widget.apiClient.register(name, email, password);
+          : await widget.apiClient.register(name, username, email, password);
       widget.onAuth(result);
     } on ApiException catch (e) {
       setState(() {
@@ -101,6 +104,20 @@ class _AuthScreenState extends State<AuthScreen> {
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
                                 return 'Введите имя';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _usernameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Логин',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Введите логин';
                               }
                               return null;
                             },
