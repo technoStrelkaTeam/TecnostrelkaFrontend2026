@@ -41,14 +41,30 @@ class _AuthScreenState extends State<AuthScreen> {
       _error = null;
     });
     try {
-      final email = _emailController.text.trim();
+      final rawEmail = _emailController.text.trim();
       final password = _passwordController.text;
       final name = _nameController.text.trim();
       final username = _usernameController.text.trim();
-      final result = _isLogin
-          ? await widget.apiClient.login(email, password)
-          : await widget.apiClient.register(name, username, email, password);
-      widget.onAuth(result);
+      if (_isLogin) {
+        final result = await widget.apiClient.login(rawEmail, password);
+        widget.onAuth(result);
+      } else {
+        final normalizedEmail = rawEmail.toLowerCase();
+        final emailTaken = await widget.apiClient.isEmailTaken(normalizedEmail);
+        if (emailTaken) {
+          setState(() {
+            _error = 'Этот email уже зарегистрирован';
+          });
+          return;
+        }
+        final result = await widget.apiClient.register(
+          name,
+          username,
+          normalizedEmail,
+          password,
+        );
+        widget.onAuth(result);
+      }
     } on ApiException catch (e) {
       setState(() {
         _error = e.message;

@@ -94,12 +94,17 @@ class _HomeScreenState extends State<HomeScreen> {
           nextBillingDate: subscription.nextBillingDate,
           category: subscription.category,
         ));
+        final merged = _mergeCreatedSubscription(
+          local: subscription,
+          created: created,
+        );
         setState(() {
           final index = _subscriptions.indexWhere((s) => s == subscription);
           if (index != -1) {
-            _subscriptions[index] = created;
+            _subscriptions[index] = merged;
           }
         });
+        await _saveSubscriptionsToLocal();
       } else {
         await widget.apiClient.updateSubscription(subscription.id!, SubscriptionDraft(
           name: subscription.name,
@@ -115,6 +120,26 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Subscription _mergeCreatedSubscription({
+    required Subscription local,
+    required Subscription created,
+  }) {
+    final sameDay = _isSameDay(local.nextBillingDate, created.nextBillingDate);
+    return Subscription(
+      id: created.id,
+      name: created.name,
+      price: created.price,
+      billingPeriod: created.billingPeriod,
+      interval: created.interval,
+      nextBillingDate: sameDay ? created.nextBillingDate : local.nextBillingDate,
+      category: created.category,
+    );
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   Future<void> _editSubscription(Subscription subscription) async {
     final result = await showDialog<SubscriptionDraft>(
       context: context,
@@ -124,28 +149,41 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _loading = true;
       });
-      final index = _subscriptions.indexOf(subscription);
-      if (index != -1) {
-        final updated = Subscription(
-          id: subscription.id,
-          name: result.name,
-          price: result.price,
-          billingPeriod: result.billingPeriod,
-          interval: result.interval,
-          nextBillingDate: result.nextBillingDate,
-          category: result.category,
-        );
-        _subscriptions[index] = updated;
-        await _saveSubscriptionsToLocal();
-        await _syncSubscriptionToServer(updated);
-        await _scheduleNotifications();
+      try {
+        final index = _subscriptions.indexOf(subscription);
+        if (index != -1) {
+          final updated = Subscription(
+            id: subscription.id,
+            name: result.name,
+            price: result.price,
+            billingPeriod: result.billingPeriod,
+            interval: result.interval,
+            nextBillingDate: result.nextBillingDate,
+            category: result.category,
+          );
+          _subscriptions[index] = updated;
+          await _saveSubscriptionsToLocal();
+          await _syncSubscriptionToServer(updated);
+          await _scheduleNotifications();
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Подписка обновлена')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Не удалось обновить подписку')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+          });
+        }
       }
-      setState(() {
-        _loading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Подписка обновлена')),
-      );
     }
   }
 
@@ -417,6 +455,54 @@ class _ProfileViewState extends State<ProfileView> {
     }
   }
 
+  Future<void> _testNotification() async {
+    setState(() {
+      _loading = true;
+      _findByEmailResult = null;
+    });
+    try {
+      final enabled = await NotificationService.instance.areNotificationsEnabled();
+      if (!enabled) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Уведомления отключены в настройках устройства')),
+        );
+        return;
+      }
+      final exactAllowed = await NotificationService.instance.canScheduleExactAlarms();
+      if (!exactAllowed) {
+        final opened = await NotificationService.instance.requestExactAlarmPermission();
+        if (!opened && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Не удалось открыть настройки точных будильников')),
+          );
+        }
+      }
+      await NotificationService.instance.showTestNotification();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Тест отправлен: должно появиться сразу и через 10с')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка теста уведомлений: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _editProfile() async {
     final result = await showDialog<EditProfileResult>(
       context: context,
@@ -489,6 +575,12 @@ class _ProfileViewState extends State<ProfileView> {
           child: _loading
               ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Проверить по email'),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _loading ? null : _testNotification,
+          icon: const Icon(Icons.notifications_active_outlined),
+          label: const Text('Тест уведомления'),
         ),
         if (_findByEmailResult != null)
           Padding(

@@ -103,6 +103,22 @@ class ApiClient {
     return UserProfile.fromJson(json);
   }
 
+  Future<bool> isEmailTaken(String email) async {
+    final uri = Uri.parse('$_baseUrl/users/getByEmail/$email');
+    _logRequest(method: 'GET', uri: uri, headers: _headers());
+    final response = await http.get(uri, headers: _headers());
+    if (response.statusCode == 404) {
+      return false;
+    }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      return false;
+    }
+    if (response.statusCode >= 400) {
+      _decode(response);
+    }
+    return true;
+  }
+
   Future<Map<String, dynamic>> importFromImap(String login, String password) async {
     final uri = Uri.parse('$_baseUrl/users/import-from-imap');
     _logRequest(
@@ -140,6 +156,7 @@ class ApiClient {
     final json = _decode(response);
     return UserProfile.fromJson(json);
   }
+
 
   Future<List<Subscription>> getSubscriptions() async {
     final uri = Uri.parse('$_baseUrl/subscribes/me');
