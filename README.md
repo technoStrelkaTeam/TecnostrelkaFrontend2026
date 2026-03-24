@@ -1,17 +1,113 @@
-# tecnostrelka
+# Calendarium
 
-A new Flutter project.
+Кроссплатформенное приложение на Flutter. Репозиторий содержит исходный код, конфигурации платформ и инструкции для локального запуска и сборки.
 
-## Getting Started
 
-This project is a starting point for a Flutter application.
+## Требования
 
-A few resources to get you started if this is your first Flutter project:
+- Flutter SDK (рекомендуется Stable-канал)
+- Dart SDK (идет вместе с Flutter)
+- Android Studio или Xcode (для мобильных сборок)
+- Для iOS сборок нужен macOS
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Проверьте окружение:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter doctor
+```
+
+## Быстрый старт
+
+```bash
+flutter pub get
+flutter run
+```
+
+По умолчанию `flutter run` запустит приложение на подключенном устройстве или эмуляторе.
+
+## Запуск по платформам
+
+Android:
+
+```bash
+flutter run -d android
+```
+
+iOS (только macOS):
+
+```bash
+cd ios
+pod install
+cd ..
+flutter run -d ios
+```
+
+Web:
+
+```bash
+flutter run -d chrome
+```
+
+Web с ручным запуском:
+
+```bash
+flutter build web
+cd build/web
+python -m http.server 8080
+```
+
+
+Посмотреть список доступных девайсов:
+
+```bash
+flutter devices
+```
+
+## Сборка
+
+Android APK:
+
+```bash
+flutter build apk
+```
+
+Android App Bundle:
+
+```bash
+flutter build appbundle
+```
+
+iOS (только macOS):
+
+```bash
+flutter build ios
+```
+
+Web:
+
+```bash
+flutter build web
+```
+
+Результаты сборки находятся в папке `build/`.
+
+## Обратите внимание ##
+Для запуска web-сборки нужно сменить IP-адрес на `http://127.0.0.1:8000` в файле `/api/api_client.dart`
+
+
+```bash
+if (kIsWeb) {
+      return 'http://127.0.0.1:8000';
+    }
+    return 'http://127.0.0.1:8000';
+```
+
+Для запуска на приложения на другом устройстве укажите локальный IPv4-адрес устройства на котором развёрнут бекенд аналогично инструкции приведённой выше:
+
+Узнать IPv4-адрес можно через команды:
+```bash
+ip a ## Linux and macos
+ipconfig ## Windows
+```
+
+

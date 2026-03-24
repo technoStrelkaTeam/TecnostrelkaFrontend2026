@@ -357,7 +357,7 @@ class _BarColumn extends StatelessWidget {
             width: barWidth,
             height: 20 + 92 * heightFactor,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.85),
+              color: color.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(8),
             ),
           ),
@@ -464,7 +464,7 @@ class _ScoreRow extends StatelessWidget {
           child: LinearProgressIndicator(
             value: clamped / 100,
             minHeight: 10,
-            backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
         ),
       ],
