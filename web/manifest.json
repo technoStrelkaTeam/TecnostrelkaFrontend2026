@@ -1,6 +1,6 @@
 {
-    "name": "tecnostrelka",
-    "short_name": "tecnostrelka",
+    "name": "Calendarium",
+    "short_name": "Calendarium",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

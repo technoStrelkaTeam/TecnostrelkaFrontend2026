@@ -380,7 +380,7 @@
       "languageVersion": "3.8"
     },
     {
-      "name": "tecnostrelka",
+      "name": "calendarium",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.12"

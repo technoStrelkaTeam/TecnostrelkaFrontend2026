@@ -1,4 +1,4 @@
-package com.example.tecnostrelka
+package com.technostrelka.calendarium
 
 import io.flutter.embedding.android.FlutterActivity
 import android.app.AlarmManager

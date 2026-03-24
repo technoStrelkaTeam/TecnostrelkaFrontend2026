@@ -1,10 +1,10 @@
 {
   "roots": [
-    "tecnostrelka"
+    "calendarium"
   ],
   "packages": [
     {
-      "name": "tecnostrelka",
+      "name": "calendarium",
       "version": "1.0.0+1",
       "dependencies": [
         "cupertino_icons",
