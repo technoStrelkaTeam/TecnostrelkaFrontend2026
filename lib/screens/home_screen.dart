@@ -264,6 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _loading = true;
       });
       var updatedSuccessfully = false;
+      var loadingCleared = false;
       try {
         final index = _subscriptions.indexOf(subscription);
         if (index != -1) {
@@ -278,8 +279,19 @@ class _HomeScreenState extends State<HomeScreen> {
           );
           _subscriptions[index] = updated;
           await _saveSubscriptionsToLocal();
-          await _syncSubscriptionToServer(updated);
           updatedSuccessfully = true;
+          if (mounted) {
+            setState(() {
+              _loading = false;
+            });
+            loadingCleared = true;
+          }
+          Future<void>(() async {
+            await _syncSubscriptionToServer(updated);
+          }).catchError((_) {});
+          Future<void>(() async {
+            await _scheduleNotifications();
+          }).catchError((_) {});
         }
       } catch (_) {
         if (mounted) {
@@ -288,7 +300,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       } finally {
-        if (mounted) {
+        if (mounted && !loadingCleared) {
           setState(() {
             _loading = false;
           });
@@ -298,11 +310,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Подписка обновлена')),
         );
-        try {
-          await _scheduleNotifications();
-        } catch (_) {
-          // Уведомления не критичны для успешного сохранения подписки.
-        }
       }
     }
   }
@@ -390,9 +397,8 @@ class _HomeScreenState extends State<HomeScreen> {
           final item = entry.value;
           if (item is Map<String, dynamic>) {
             final cost = item['cost'];
-            final nextPay = item['next_pay'];
             final price = cost != null ? double.tryParse(cost.toString()) ?? 0.0 : 0.0;
-            final nextDate = _rollForwardDate(_dateFromList(nextPay), 'month', 1, today);
+            final nextDate = today;
             if (price > 0) {
               final draft = SubscriptionDraft(
                 name: name,
@@ -448,16 +454,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _scheduleNotifications() async {
     await NotificationService.instance.scheduleForSubscriptions(_subscriptions);
-  }
-
-  DateTime _dateFromList(dynamic value) {
-    if (value is List && value.length >= 3) {
-      final year = int.tryParse(value[0]?.toString() ?? '') ?? DateTime.now().year;
-      final month = int.tryParse(value[1]?.toString() ?? '') ?? 1;
-      final day = int.tryParse(value[2]?.toString() ?? '') ?? 1;
-      return DateTime(year, month, day);
-    }
-    return DateTime.now().add(const Duration(days: 30));
   }
 
   @override
