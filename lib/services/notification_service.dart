@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -39,21 +38,12 @@ class NotificationService {
     await init();
     await _plugin.cancelAll();
     final exactAllowed = await canScheduleExactAlarms();
-    debugPrint(
-      'Notifications: scheduling ${subscriptions.length}, tz=${tz.local.name}, exact=$exactAllowed',
-    );
     for (final subscription in subscriptions) {
       final scheduled = _buildReminderTime(subscription.nextBillingDate);
       if (scheduled == null) {
-        debugPrint(
-          'Notifications: skip ${subscription.name} next=${subscription.nextBillingDate.toIso8601String()} (in past)',
-        );
         continue;
       }
       final id = _notificationId(subscription);
-      debugPrint(
-        'Notifications: schedule id=$id name=${subscription.name} next=${subscription.nextBillingDate.toIso8601String()} reminder=${scheduled.toIso8601String()}',
-      );
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
           'subscription_reminders',
@@ -64,25 +54,19 @@ class NotificationService {
         ),
         iOS: const DarwinNotificationDetails(),
       );
-      try {
-        await _plugin.zonedSchedule(
-          id,
-          'Скоро списание',
-          '${subscription.name} • ${subscription.price.toStringAsFixed(2)} RUB завтра',
-          scheduled,
-          details,
-          androidScheduleMode: exactAllowed
-              ? AndroidScheduleMode.exactAllowWhileIdle
-              : AndroidScheduleMode.inexactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
-        );
-      } catch (e) {
-        debugPrint('Notifications: schedule failed id=$id error=$e');
-      }
+      await _plugin.zonedSchedule(
+        id,
+        'Скоро списание',
+        '${subscription.name} • ${subscription.price.toStringAsFixed(2)} RUB завтра',
+        scheduled,
+        details,
+        androidScheduleMode: exactAllowed
+            ? AndroidScheduleMode.exactAllowWhileIdle
+            : AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
     }
-    final pending = await _plugin.pendingNotificationRequests();
-    debugPrint('Notifications: pending=${pending.length}');
   }
 
   Future<void> showTestNotification() async {
@@ -149,8 +133,10 @@ class NotificationService {
 
   tz.TZDateTime? _buildReminderTime(DateTime nextBillingDate) {
     final now = tz.TZDateTime.now(tz.local);
-    // TEMP: schedule 1 minute from now for quick verification.
-    final scheduled = tz.TZDateTime.now(tz.local).add(const Duration(minutes: 1));
+    final base = DateTime(nextBillingDate.year, nextBillingDate.month, nextBillingDate.day)
+        .subtract(const Duration(days: 1))
+        .add(const Duration(hours: 13));
+    final scheduled = tz.TZDateTime.from(base, tz.local);
     if (scheduled.isBefore(now)) {
       return null;
     }

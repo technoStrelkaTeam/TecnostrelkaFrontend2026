@@ -52,12 +52,6 @@ class ApiClient {
 
   Future<String> _requestToken(String username, String password) async {
     final uri = Uri.parse('$_baseUrl/users/token');
-    _logRequest(
-      method: 'POST',
-      uri: uri,
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {'username': username, 'password': password},
-    );
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -73,14 +67,6 @@ class ApiClient {
 
   Future<UserProfile> _fetchMe({required String token}) async {
     final uri = Uri.parse('$_baseUrl/users/me');
-    _logRequest(
-      method: 'GET',
-      uri: uri,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
     final response = await http.get(
       uri,
       headers: {
@@ -94,7 +80,6 @@ class ApiClient {
 
   Future<UserProfile> getUserByEmail(String email) async {
     final uri = Uri.parse('$_baseUrl/users/getByEmail/$email');
-    _logRequest(method: 'GET', uri: uri, headers: _headers());
     final response = await http.get(
       uri,
       headers: _headers(),
@@ -105,7 +90,6 @@ class ApiClient {
 
   Future<bool> isEmailTaken(String email) async {
     final uri = Uri.parse('$_baseUrl/users/getByEmail/$email');
-    _logRequest(method: 'GET', uri: uri, headers: _headers());
     final response = await http.get(uri, headers: _headers());
     if (response.statusCode == 404) {
       return false;
@@ -121,12 +105,6 @@ class ApiClient {
 
   Future<Map<String, dynamic>> importFromImap(String login, String password) async {
     final uri = Uri.parse('$_baseUrl/users/import-from-imap');
-    _logRequest(
-      method: 'POST',
-      uri: uri,
-      headers: _headers(),
-      body: {'login': login, 'password': password},
-    );
     final response = await http.post(
       uri,
       headers: _headers(),
@@ -142,12 +120,6 @@ class ApiClient {
 
   Future<UserProfile> updateProfile(String name, String email) async {
     final uri = Uri.parse('$_baseUrl/users/me');
-    _logRequest(
-      method: 'PUT',
-      uri: uri,
-      headers: _headers(),
-      body: {'name': name, 'email': email},
-    );
     final response = await http.put(
       uri,
       headers: _headers(),
@@ -160,10 +132,20 @@ class ApiClient {
 
   Future<List<Subscription>> getSubscriptions() async {
     final uri = Uri.parse('$_baseUrl/subscribes/me');
-    _logRequest(method: 'GET', uri: uri, headers: _headers());
     final response = await http.get(uri, headers: _headers());
-    final decoded = jsonDecode(response.body) as List<dynamic>;
-    return decoded.map((e) => Subscription.fromJson(e as Map<String, dynamic>)).toList();
+    final decoded = jsonDecode(response.body);
+    if (response.statusCode >= 400) {
+      final json = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      final message =
+          json['detail']?.toString() ??
+          json['error']?.toString() ??
+          'Request failed (HTTP ${response.statusCode})';
+      throw ApiException(message);
+    }
+    if (decoded is List) {
+      return decoded.map((e) => Subscription.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    return <Subscription>[];
   }
 
   Future<Subscription> createSubscription(SubscriptionDraft draft) async {
@@ -176,7 +158,6 @@ class ApiClient {
       'next_pay': draft.nextBillingDate.toIso8601String(),
       'category': draft.category,
     };
-    _logRequest(method: 'POST', uri: uri, headers: _headers(), body: body);
     final response = await http.post(
       uri,
       headers: _headers(),
@@ -196,7 +177,6 @@ class ApiClient {
       'next_pay': draft.nextBillingDate.toIso8601String(),
       'category': draft.category,
     };
-    _logRequest(method: 'PUT', uri: uri, headers: _headers(), body: body);
     await http.put(
       uri,
       headers: _headers(),
@@ -206,14 +186,19 @@ class ApiClient {
 
   Future<void> deleteSubscription(int id) async {
     final uri = Uri.parse('$_baseUrl/subscribes/me/$id');
-    _logRequest(method: 'DELETE', uri: uri, headers: _headers());
     await http.delete(uri, headers: _headers());
+  }
+
+  Future<AiInsights> getAiInsights() async {
+    final uri = Uri.parse('$_baseUrl/subscribes/me/ai-analysis');
+    final response = await http.get(uri, headers: _headers());
+    final json = _decode(response);
+    return AiInsights.fromJson(json);
   }
 
   Future<http.Response> _post(String path, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$_baseUrl$path');
     final headers = _headers();
-    _logRequest(method: 'POST', uri: uri, headers: headers, body: body ?? {});
     return http.post(uri, headers: headers, body: jsonEncode(body ?? {}));
   }
 
@@ -242,30 +227,6 @@ class ApiClient {
     return json;
   }
 
-  void _logRequest({
-    required String method,
-    required Uri uri,
-    Map<String, String>? headers,
-    Object? body,
-  }) {
-    final buffer = StringBuffer()
-      ..writeln('API $method $uri');
-    if (headers != null && headers.isNotEmpty) {
-      buffer.writeln('Headers: $headers');
-    }
-    if (body != null) {
-      String bodyString;
-      if (body is String) {
-        bodyString = body;
-      } else if (body is Map || body is List) {
-        bodyString = jsonEncode(body);
-      } else {
-        bodyString = body.toString();
-      }
-      buffer.writeln('Body: $bodyString');
-    }
-    debugPrint(buffer.toString());
-  }
 }
 
 class ApiException implements Exception {

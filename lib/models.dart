@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class UserProfile {
   final int id;
   final String name;
@@ -105,4 +107,66 @@ class SubscriptionDraft {
     required this.nextBillingDate,
     required this.category,
   });
+}
+
+class AiInsights {
+  final double rationalityScore;
+  final List<String> recommendCancel;
+  final List<String> recommendKeep;
+  final List<String> alternatives;
+  final String shortCommentRu;
+
+  AiInsights({
+    required this.rationalityScore,
+    required this.recommendCancel,
+    required this.recommendKeep,
+    required this.alternatives,
+    required this.shortCommentRu,
+  });
+
+  factory AiInsights.fromJson(Map<String, dynamic> json) {
+    return AiInsights(
+      rationalityScore: _asDouble(json['rationality_score']) ?? 0,
+      recommendCancel: _stringList(json['recommend_cancel']),
+      recommendKeep: _stringList(json['recommend_keep']),
+      alternatives: _stringList(json['alternatives']),
+      shortCommentRu: (json['short_comment_ru'] ?? '').toString(),
+    );
+  }
+
+  static double? _asDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+
+  static List<String> _stringList(dynamic value) {
+    if (value is List) {
+      return value
+          .map((e) => _stringFromValue(e))
+          .where((e) => e.trim().isNotEmpty)
+          .toList();
+    }
+    if (value is Map) {
+      final parsed = _stringFromValue(value);
+      return parsed.trim().isEmpty ? <String>[] : [parsed];
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      return [value.trim()];
+    }
+    return <String>[];
+  }
+
+  static String _stringFromValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is Map) {
+      final name = value['name'] ?? value['title'] ?? value['service'] ?? value['label'];
+      if (name != null) {
+        return name.toString();
+      }
+      return jsonEncode(value);
+    }
+    return value.toString();
+  }
 }

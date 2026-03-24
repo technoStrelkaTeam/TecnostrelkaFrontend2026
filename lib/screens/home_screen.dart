@@ -8,6 +8,7 @@ import 'dart:convert';
 import '../api/api_client.dart';
 import '../models.dart';
 import '../services/notification_service.dart';
+import 'analytic_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -352,6 +353,10 @@ class _HomeScreenState extends State<HomeScreen> {
         onRemove: _removeSubscription,
         onEdit: _editSubscription,
       ),
+      AiAnalyticsScreen(
+        apiClient: widget.apiClient,
+        subscriptions: _subscriptions,
+      ),
       AddSubscriptionForm(
         onSave: _addSubscription,
         loading: _loading,
@@ -376,7 +381,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: SafeArea(child: pages[_index]),
+      body: SafeArea(
+        child: IndexedStack(
+          index: _index,
+          children: pages,
+        ),
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         selectedItemColor: scheme.primary,
@@ -396,6 +406,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
             label: 'Обзор',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.auto_awesome_outlined),
+            label: 'AI-анализ',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.add_circle_outline),
