@@ -1,3 +1,5 @@
+// ignore_for_file: control_flow_in_finally
+
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -21,15 +23,18 @@ class AiAnalyticsScreen extends StatefulWidget {
 
 class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
   AiInsights? _insights;
+  ChartData? _chartData;
   bool _loading = false;
+  bool _chartLoading = false;
   String? _error;
+  String? _chartError;
   String? _lastSignature;
 
   @override
   void initState() {
     super.initState();
     _lastSignature = _buildSignature(widget.subscriptions);
-    _fetchInsights();
+    _refreshAnalytics();
   }
 
   @override
@@ -38,8 +43,15 @@ class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
     final signature = _buildSignature(widget.subscriptions);
     if (_lastSignature != signature) {
       _lastSignature = signature;
-      _fetchInsights();
+      _refreshAnalytics();
     }
+  }
+
+  Future<void> _refreshAnalytics() async {
+    await Future.wait([
+      _fetchInsights(),
+      _fetchChartData(),
+    ]);
   }
 
   Future<void> _fetchInsights() async {
@@ -66,6 +78,30 @@ class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
     }
   }
 
+  Future<void> _fetchChartData() async {
+    setState(() {
+      _chartLoading = true;
+      _chartError = null;
+    });
+    try {
+      final data = await widget.apiClient.getChartData();
+      if (!mounted) return;
+      setState(() {
+        _chartData = data;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _chartError = e.toString();
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _chartLoading = false;
+      });
+    }
+  }
+
   String _buildSignature(List<Subscription> subscriptions) {
     final tokens = subscriptions
         .map((s) => [
@@ -84,13 +120,21 @@ class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categoryStats = _buildCategoryStats(widget.subscriptions);
-    final serviceStats = _buildServiceStats(widget.subscriptions);
-    final periodStats = _buildPeriodStats(widget.subscriptions);
-    final totalMonthly = categoryStats.fold<double>(0, (sum, e) => sum + e.monthlyCost);
-    final topCategory = categoryStats.isNotEmpty ? categoryStats.first.label : '—';
+    final fallbackToLocal =
+        _chartData != null &&
+        _chartData!.category.isEmpty &&
+        _chartData!.service.isEmpty &&
+        _chartData!.period.isEmpty &&
+        widget.subscriptions.isNotEmpty;
+    final chartData = fallbackToLocal ? null : _chartData;
+    final categoryStats = chartData?.category ?? _buildCategoryStats(widget.subscriptions);
+    final serviceStats = chartData?.service ?? _buildServiceStats(widget.subscriptions);
+    final periodStats = chartData?.period ?? _buildPeriodStats(widget.subscriptions);
+    final totalMonthly =
+        chartData?.totalMonthly ?? categoryStats.fold<double>(0, (sum, e) => sum + e.monthlyCost);
+    final topCategory = chartData?.topCategory ?? (categoryStats.isNotEmpty ? categoryStats.first.label : '—');
     return RefreshIndicator(
-      onRefresh: _fetchInsights,
+      onRefresh: _refreshAnalytics,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -125,6 +169,20 @@ class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
             loading: _loading,
             error: _error,
           ),
+          if (_chartError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Статистика получена локально: $_chartError',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (_chartLoading && _chartData == null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Обновляем статистику...',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );
@@ -198,12 +256,6 @@ class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
     top.add(LabelSpend(label: 'Другое', monthlyCost: otherSum));
     return top;
   }
-}
-
-class LabelSpend {
-  LabelSpend({required this.label, required this.monthlyCost});
-  final String label;
-  final double monthlyCost;
 }
 
 class _SummaryCard extends StatelessWidget {

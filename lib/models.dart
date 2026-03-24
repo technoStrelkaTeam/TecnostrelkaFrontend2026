@@ -129,7 +129,7 @@ class AiInsights {
       rationalityScore: _asDouble(json['rationality_score']) ?? 0,
       recommendCancel: _stringList(json['recommend_cancel']),
       recommendKeep: _stringList(json['recommend_keep']),
-      alternatives: _stringList(json['alternatives']),
+      alternatives: _stringList(json['alternatives'], preferAlternative: true),
       shortCommentRu: (json['short_comment_ru'] ?? '').toString(),
     );
   }
@@ -140,33 +140,167 @@ class AiInsights {
     return double.tryParse(value.toString());
   }
 
-  static List<String> _stringList(dynamic value) {
+  static List<String> _stringList(dynamic value, {bool preferAlternative = false}) {
+    final seen = <String>{};
     if (value is List) {
       return value
-          .map((e) => _stringFromValue(e))
+          .map((e) => _stringFromValue(e, preferAlternative: preferAlternative))
           .where((e) => e.trim().isNotEmpty)
+          .where((e) => _isAlternativeValid(e, preferAlternative: preferAlternative))
+          .where((e) => seen.add(_normalizeKey(e)))
           .toList();
     }
     if (value is Map) {
-      final parsed = _stringFromValue(value);
-      return parsed.trim().isEmpty ? <String>[] : [parsed];
+      final parsed = _stringFromValue(value, preferAlternative: preferAlternative);
+      if (parsed.trim().isEmpty) return <String>[];
+      if (!_isAlternativeValid(parsed, preferAlternative: preferAlternative)) return <String>[];
+      if (!seen.add(_normalizeKey(parsed))) return <String>[];
+      return [parsed];
     }
     if (value is String && value.trim().isNotEmpty) {
-      return [value.trim()];
+      final trimmed = value.trim();
+      if (!_isAlternativeValid(trimmed, preferAlternative: preferAlternative)) return <String>[];
+      if (!seen.add(_normalizeKey(trimmed))) return <String>[];
+      return [trimmed];
     }
     return <String>[];
   }
 
-  static String _stringFromValue(dynamic value) {
+  static String _stringFromValue(dynamic value, {bool preferAlternative = false}) {
     if (value == null) return '';
     if (value is String) return value;
     if (value is Map) {
-      final name = value['name'] ?? value['title'] ?? value['service'] ?? value['label'];
+      final alternative =
+          value['alternative'] ?? value['alt'] ?? value['replacement'] ?? value['recommendation'];
+      final service = value['service'] ?? value['name'] ?? value['title'] ?? value['label'];
+      if (preferAlternative && alternative != null && service != null) {
+        return '${service.toString()} → ${alternative.toString()}';
+      }
+      if (preferAlternative && alternative != null) {
+        return alternative.toString();
+      }
+      final name = service ?? alternative;
       if (name != null) {
         return name.toString();
       }
       return jsonEncode(value);
     }
     return value.toString();
+  }
+
+  static bool _isAlternativeValid(String value, {required bool preferAlternative}) {
+    if (!preferAlternative) return true;
+    final parts = value.split('→').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (parts.length < 2) return true;
+    final left = _normalizeKey(parts.first);
+    final right = _normalizeKey(parts.last);
+    return left != right;
+  }
+
+  static String _normalizeKey(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('→', '')
+        .replaceAll(RegExp(r'[^a-z0-9а-яё]+', caseSensitive: false), '')
+        .trim();
+  }
+}
+
+class LabelSpend {
+  LabelSpend({required this.label, required this.monthlyCost});
+  final String label;
+  final double monthlyCost;
+}
+
+class ChartData {
+  ChartData({
+    required this.category,
+    required this.service,
+    required this.period,
+    this.totalMonthly,
+    this.topCategory,
+  });
+
+  final List<LabelSpend> category;
+  final List<LabelSpend> service;
+  final List<LabelSpend> period;
+  final double? totalMonthly;
+  final String? topCategory;
+
+  factory ChartData.fromJson(Map<String, dynamic> json) {
+    final category = _seriesFrom(
+      json['categories'] ?? json['category_stats'] ?? json['by_category'] ?? json['category'],
+    );
+    final service = _seriesFrom(
+      json['services'] ?? json['service_stats'] ?? json['by_service'] ?? json['service'],
+    );
+    final period = _seriesFrom(
+      json['periods'] ?? json['period_stats'] ?? json['by_period'] ?? json['period'],
+    );
+    final totalMonthly = _asDouble(
+      json['total_monthly'] ?? json['totalMonthly'] ?? json['monthly_total'] ?? json['monthlyTotal'],
+    );
+    String? topCategory = json['top_category']?.toString() ?? json['topCategory']?.toString();
+    if (topCategory == null && category.isNotEmpty) {
+      topCategory = category.first.label;
+    }
+    return ChartData(
+      category: category,
+      service: service,
+      period: period,
+      totalMonthly: totalMonthly,
+      topCategory: topCategory,
+    );
+  }
+
+  static List<LabelSpend> _seriesFrom(dynamic value) {
+    final items = <LabelSpend>[];
+    if (value is List) {
+      for (final entry in value) {
+        final parsed = _itemFrom(entry);
+        if (parsed != null) {
+          items.add(parsed);
+        }
+      }
+    } else if (value is Map) {
+      for (final entry in value.entries) {
+        final cost = _asDouble(entry.value);
+        if (cost == null) continue;
+        items.add(LabelSpend(label: entry.key.toString(), monthlyCost: cost));
+      }
+    }
+    items.sort((a, b) => b.monthlyCost.compareTo(a.monthlyCost));
+    return items;
+  }
+
+  static LabelSpend? _itemFrom(dynamic value) {
+    if (value is LabelSpend) return value;
+    if (value is List && value.length >= 2) {
+      final label = value[0]?.toString();
+      final cost = _asDouble(value[1]);
+      if (label == null || cost == null) return null;
+      return LabelSpend(label: label, monthlyCost: cost);
+    }
+    if (value is Map) {
+      final label =
+          value['label'] ?? value['name'] ?? value['category'] ?? value['service'] ?? value['period'];
+      final cost = _asDouble(
+        value['monthly_cost'] ??
+            value['monthlyCost'] ??
+            value['monthly'] ??
+            value['value'] ??
+            value['cost'] ??
+            value['amount'],
+      );
+      if (label == null || cost == null) return null;
+      return LabelSpend(label: label.toString(), monthlyCost: cost);
+    }
+    return null;
+  }
+
+  static double? _asDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 }

@@ -196,6 +196,13 @@ class ApiClient {
     return AiInsights.fromJson(json);
   }
 
+  Future<ChartData> getChartData() async {
+    final uri = Uri.parse('$_baseUrl/subscribes/me/chart-data');
+    final response = await http.get(uri, headers: _headers());
+    final json = _decode(response);
+    return ChartData.fromJson(json);
+  }
+
   Future<http.Response> _post(String path, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$_baseUrl$path');
     final headers = _headers();

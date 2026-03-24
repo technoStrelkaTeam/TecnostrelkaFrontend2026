@@ -61,13 +61,123 @@ class _HomeScreenState extends State<HomeScreen> {
         subscriptionsJson.map((json) => Subscription.fromJson(jsonDecode(json))),
       );
     });
-    await _scheduleNotifications();
+    final updated = await _normalizeOverdueSubscriptions();
+    if (!updated) {
+      await _scheduleNotifications();
+    }
   }
 
   Future<void> _saveSubscriptionsToLocal() async {
     final prefs = await SharedPreferences.getInstance();
     final subscriptionsJson = _subscriptions.map((s) => jsonEncode(s.toJson())).toList();
     await prefs.setStringList('subscriptions', subscriptionsJson);
+  }
+
+  Future<bool> _normalizeOverdueSubscriptions({bool syncToServer = false}) async {
+    if (_subscriptions.isEmpty) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    var changed = false;
+    final updatedSubscriptions = <Subscription>[];
+    final toSync = <Subscription>[];
+
+    for (final subscription in _subscriptions) {
+      final adjustedDate = _rollForwardDate(
+        subscription.nextBillingDate,
+        subscription.billingPeriod,
+        subscription.interval,
+        today,
+      );
+      if (_isSameDay(adjustedDate, subscription.nextBillingDate)) {
+        updatedSubscriptions.add(subscription);
+      } else {
+        final updated = Subscription(
+          id: subscription.id,
+          name: subscription.name,
+          price: subscription.price,
+          billingPeriod: subscription.billingPeriod,
+          interval: subscription.interval,
+          nextBillingDate: adjustedDate,
+          category: subscription.category,
+        );
+        updatedSubscriptions.add(updated);
+        if (syncToServer && updated.id != null) {
+          toSync.add(updated);
+        }
+        changed = true;
+      }
+    }
+
+    if (!changed) return false;
+
+    if (mounted) {
+      setState(() {
+        _subscriptions
+          ..clear()
+          ..addAll(updatedSubscriptions);
+      });
+    } else {
+      _subscriptions
+        ..clear()
+        ..addAll(updatedSubscriptions);
+    }
+
+    await _saveSubscriptionsToLocal();
+    await _scheduleNotifications();
+
+    if (syncToServer && toSync.isNotEmpty) {
+      for (final subscription in toSync) {
+        await widget.apiClient.updateSubscription(
+          subscription.id!,
+          SubscriptionDraft(
+            name: subscription.name,
+            price: subscription.price,
+            billingPeriod: subscription.billingPeriod,
+            interval: subscription.interval,
+            nextBillingDate: subscription.nextBillingDate,
+            category: subscription.category,
+          ),
+        );
+      }
+    }
+
+    return true;
+  }
+
+  DateTime _rollForwardDate(
+    DateTime date,
+    String billingPeriod,
+    int interval,
+    DateTime today,
+  ) {
+    final step = interval < 1 ? 1 : interval;
+    var current = DateTime(date.year, date.month, date.day);
+    while (current.isBefore(today)) {
+      current = _advanceDate(current, billingPeriod, step);
+    }
+    return current;
+  }
+
+  DateTime _advanceDate(DateTime date, String billingPeriod, int interval) {
+    switch (billingPeriod) {
+      case 'year':
+        return _addMonths(date, 12 * interval);
+      case 'month':
+        return _addMonths(date, interval);
+      case 'week':
+        return date.add(Duration(days: 7 * interval));
+      default:
+        return date.add(Duration(days: 30 * interval));
+    }
+  }
+
+  DateTime _addMonths(DateTime date, int monthsToAdd) {
+    final monthIndex = date.month - 1 + monthsToAdd;
+    final year = date.year + (monthIndex ~/ 12);
+    final month = (monthIndex % 12) + 1;
+    final lastDay = DateTime(year, month + 1, 0).day;
+    final day = date.day > lastDay ? lastDay : date.day;
+    return DateTime(year, month, day);
   }
 
   Future<void> _syncSubscriptionsFromServer() async {
@@ -77,8 +187,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _subscriptions.clear();
         _subscriptions.addAll(serverSubscriptions);
       });
-      await _saveSubscriptionsToLocal();
-      await _scheduleNotifications();
+      final updated = await _normalizeOverdueSubscriptions(syncToServer: true);
+      if (!updated) {
+        await _saveSubscriptionsToLocal();
+        await _scheduleNotifications();
+      }
     } catch (e) {
       // If server fails, keep local data
     }
@@ -150,6 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _loading = true;
       });
+      var updatedSuccessfully = false;
       try {
         final index = _subscriptions.indexOf(subscription);
         if (index != -1) {
@@ -165,12 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _subscriptions[index] = updated;
           await _saveSubscriptionsToLocal();
           await _syncSubscriptionToServer(updated);
-          await _scheduleNotifications();
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Подписка обновлена')),
-          );
+          updatedSuccessfully = true;
         }
       } catch (_) {
         if (mounted) {
@@ -183,6 +292,16 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _loading = false;
           });
+        }
+      }
+      if (updatedSuccessfully && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Подписка обновлена')),
+        );
+        try {
+          await _scheduleNotifications();
+        } catch (_) {
+          // Уведомления не критичны для успешного сохранения подписки.
         }
       }
     }
@@ -259,6 +378,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final imapLogin = _imapLoginController.text.trim();
     final imapPassword = _imapPasswordController.text;
     final parsed = <Subscription>[];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
     if (imapLogin.isNotEmpty && imapPassword.isNotEmpty) {
       try {
@@ -271,7 +392,7 @@ class _HomeScreenState extends State<HomeScreen> {
             final cost = item['cost'];
             final nextPay = item['next_pay'];
             final price = cost != null ? double.tryParse(cost.toString()) ?? 0.0 : 0.0;
-            final nextDate = _dateFromList(nextPay);
+            final nextDate = _rollForwardDate(_dateFromList(nextPay), 'month', 1, today);
             if (price > 0) {
               final draft = SubscriptionDraft(
                 name: name,
