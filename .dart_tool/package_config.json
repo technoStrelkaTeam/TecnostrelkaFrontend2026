@@ -333,7 +333,7 @@
     },
     {
       "name": "test_api",
-      "rootUri": "file:///home/ilya/.pub-cache/hosted/pub.dev/test_api-0.7.10",
+      "rootUri": "file:///home/ilya/.pub-cache/hosted/pub.dev/test_api-0.7.11",
       "packageUri": "lib/",
       "languageVersion": "3.7"
     },
@@ -387,8 +387,8 @@
     }
   ],
   "generator": "pub",
-  "generatorVersion": "3.12.0-247.0.dev",
+  "generatorVersion": "3.12.0-284.0.dev",
   "flutterRoot": "file:///home/ilya/flutter",
-  "flutterVersion": "3.43.0-1.0.pre-138",
+  "flutterVersion": "3.43.0-1.0.pre-289",
   "pubCache": "file:///home/ilya/.pub-cache"
 }
