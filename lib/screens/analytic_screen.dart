@@ -122,17 +122,32 @@ class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
   Widget build(BuildContext context) {
     final fallbackToLocal =
         _chartData != null &&
-        _chartData!.category.isEmpty &&
-        _chartData!.service.isEmpty &&
-        _chartData!.period.isEmpty &&
+        _chartData!.monthly.isEmpty &&
+        _chartData!.quarterly.isEmpty &&
+        _chartData!.byCategory.isEmpty &&
         widget.subscriptions.isNotEmpty;
     final chartData = fallbackToLocal ? null : _chartData;
-    final categoryStats = chartData?.category ?? _buildCategoryStats(widget.subscriptions);
-    final serviceStats = chartData?.service ?? _buildServiceStats(widget.subscriptions);
-    final periodStats = chartData?.period ?? _buildPeriodStats(widget.subscriptions);
-    final totalMonthly =
-        chartData?.totalMonthly ?? categoryStats.fold<double>(0, (sum, e) => sum + e.monthlyCost);
-    final topCategory = chartData?.topCategory ?? (categoryStats.isNotEmpty ? categoryStats.first.label : '—');
+    final categoryStats = chartData != null
+        ? chartData.byCategory
+            .map((e) => LabelSpend(label: e.category, monthlyCost: e.amount / 12))
+            .toList()
+        : _buildCategoryStats(widget.subscriptions);
+    final monthlyStats = chartData != null
+        ? chartData.monthly
+            .map((e) => LabelSpend(label: e.period, monthlyCost: e.amount))
+            .toList()
+        : _buildServiceStats(widget.subscriptions);
+    final quarterlyStats = chartData != null
+        ? chartData.quarterly
+            .map((e) => LabelSpend(label: e.period, monthlyCost: e.amount))
+            .toList()
+        : _buildPeriodStats(widget.subscriptions);
+    final totalMonthly = chartData != null
+        ? chartData.forecast12Months / 12
+        : categoryStats.fold<double>(0, (sum, e) => sum + e.monthlyCost);
+    final topCategory = chartData != null
+        ? (chartData.byCategory.isNotEmpty ? chartData.byCategory.first.category : '—')
+        : (categoryStats.isNotEmpty ? categoryStats.first.label : '—');
     return RefreshIndicator(
       onRefresh: _refreshAnalytics,
       child: ListView(
@@ -155,13 +170,13 @@ class _AiAnalyticsScreenState extends State<AiAnalyticsScreen> {
           ),
           const SizedBox(height: 12),
           _ChartCard(
-            title: 'Расходы по сервисам (в месяц)',
-            data: serviceStats,
+            title: 'Прогноз по месяцам (12 мес)',
+            data: monthlyStats,
           ),
           const SizedBox(height: 12),
           _ChartCard(
-            title: 'Расходы по периодам (в месяц)',
-            data: periodStats,
+            title: 'Прогноз по кварталам',
+            data: quarterlyStats,
           ),
           const SizedBox(height: 12),
           _AiInsightsCard(

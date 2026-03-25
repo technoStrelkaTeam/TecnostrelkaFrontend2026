@@ -212,90 +212,79 @@ class LabelSpend {
   final double monthlyCost;
 }
 
+class PeriodAmount {
+  PeriodAmount({required this.period, required this.amount});
+  final String period;
+  final double amount;
+
+  factory PeriodAmount.fromJson(Map<String, dynamic> json) {
+    return PeriodAmount(
+      period: json['period']?.toString() ?? '',
+      amount: _toDouble(json['amount']),
+    );
+  }
+}
+
+class CategoryAmount {
+  CategoryAmount({required this.category, required this.amount, required this.percent});
+  final String category;
+  final double amount;
+  final double percent;
+
+  factory CategoryAmount.fromJson(Map<String, dynamic> json) {
+    return CategoryAmount(
+      category: json['category']?.toString() ?? '',
+      amount: _toDouble(json['amount']),
+      percent: _toDouble(json['percent']),
+    );
+  }
+}
+
 class ChartData {
   ChartData({
-    required this.category,
-    required this.service,
-    required this.period,
-    this.totalMonthly,
-    this.topCategory,
+    required this.monthly,
+    required this.quarterly,
+    required this.byCategory,
+    required this.forecast12Months,
   });
 
-  final List<LabelSpend> category;
-  final List<LabelSpend> service;
-  final List<LabelSpend> period;
-  final double? totalMonthly;
-  final String? topCategory;
+  final List<PeriodAmount> monthly;
+  final List<PeriodAmount> quarterly;
+  final List<CategoryAmount> byCategory;
+  final double forecast12Months;
 
   factory ChartData.fromJson(Map<String, dynamic> json) {
-    final category = _seriesFrom(
-      json['categories'] ?? json['category_stats'] ?? json['by_category'] ?? json['category'],
-    );
-    final service = _seriesFrom(
-      json['services'] ?? json['service_stats'] ?? json['by_service'] ?? json['service'],
-    );
-    final period = _seriesFrom(
-      json['periods'] ?? json['period_stats'] ?? json['by_period'] ?? json['period'],
-    );
-    final totalMonthly = _asDouble(
-      json['total_monthly'] ?? json['totalMonthly'] ?? json['monthly_total'] ?? json['monthlyTotal'],
-    );
-    String? topCategory = json['top_category']?.toString() ?? json['topCategory']?.toString();
-    if (topCategory == null && category.isNotEmpty) {
-      topCategory = category.first.label;
-    }
+    final monthly = _periodList(json['monthly']);
+    final quarterly = _periodList(json['quarterly']);
+    final byCategory = _categoryList(json['by_category'] ?? json['byCategory']);
+    final forecast12Months =
+        _asDouble(json['forecast_12_months'] ?? json['forecast12Months']) ?? 0;
     return ChartData(
-      category: category,
-      service: service,
-      period: period,
-      totalMonthly: totalMonthly,
-      topCategory: topCategory,
+      monthly: monthly,
+      quarterly: quarterly,
+      byCategory: byCategory,
+      forecast12Months: forecast12Months,
     );
   }
 
-  static List<LabelSpend> _seriesFrom(dynamic value) {
-    final items = <LabelSpend>[];
+  static List<PeriodAmount> _periodList(dynamic value) {
     if (value is List) {
-      for (final entry in value) {
-        final parsed = _itemFrom(entry);
-        if (parsed != null) {
-          items.add(parsed);
-        }
-      }
-    } else if (value is Map) {
-      for (final entry in value.entries) {
-        final cost = _asDouble(entry.value);
-        if (cost == null) continue;
-        items.add(LabelSpend(label: entry.key.toString(), monthlyCost: cost));
-      }
+      return value
+          .whereType<Map<String, dynamic>>()
+          .map((e) => PeriodAmount.fromJson(e))
+          .toList();
     }
-    items.sort((a, b) => b.monthlyCost.compareTo(a.monthlyCost));
-    return items;
+    return <PeriodAmount>[];
   }
 
-  static LabelSpend? _itemFrom(dynamic value) {
-    if (value is LabelSpend) return value;
-    if (value is List && value.length >= 2) {
-      final label = value[0]?.toString();
-      final cost = _asDouble(value[1]);
-      if (label == null || cost == null) return null;
-      return LabelSpend(label: label, monthlyCost: cost);
+  static List<CategoryAmount> _categoryList(dynamic value) {
+    if (value is List) {
+      return value
+          .whereType<Map<String, dynamic>>()
+          .map((e) => CategoryAmount.fromJson(e))
+          .toList();
     }
-    if (value is Map) {
-      final label =
-          value['label'] ?? value['name'] ?? value['category'] ?? value['service'] ?? value['period'];
-      final cost = _asDouble(
-        value['monthly_cost'] ??
-            value['monthlyCost'] ??
-            value['monthly'] ??
-            value['value'] ??
-            value['cost'] ??
-            value['amount'],
-      );
-      if (label == null || cost == null) return null;
-      return LabelSpend(label: label.toString(), monthlyCost: cost);
-    }
-    return null;
+    return <CategoryAmount>[];
   }
 
   static double? _asDouble(dynamic value) {
@@ -303,4 +292,10 @@ class ChartData {
     if (value is num) return value.toDouble();
     return double.tryParse(value.toString());
   }
+}
+
+double _toDouble(dynamic value) {
+  if (value == null) return 0;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString()) ?? 0;
 }
