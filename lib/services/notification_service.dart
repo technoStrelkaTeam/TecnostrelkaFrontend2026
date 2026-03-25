@@ -39,7 +39,7 @@ class NotificationService {
     await _plugin.cancelAll();
     final exactAllowed = await canScheduleExactAlarms();
     for (final subscription in subscriptions) {
-      final scheduled = _buildReminderTime(subscription.nextBillingDate);
+      final scheduled = _buildReminderTime(subscription.nextBillingDate.subtract(Duration(days: 1)));
       if (scheduled == null) {
         continue;
       }
