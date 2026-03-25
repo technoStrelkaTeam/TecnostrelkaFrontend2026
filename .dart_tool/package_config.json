@@ -39,9 +39,9 @@
     },
     {
       "name": "cupertino_icons",
-      "rootUri": "file:///home/ilya/.pub-cache/hosted/pub.dev/cupertino_icons-1.0.8",
+      "rootUri": "file:///home/ilya/.pub-cache/hosted/pub.dev/cupertino_icons-1.0.9",
       "packageUri": "lib/",
-      "languageVersion": "3.1"
+      "languageVersion": "3.9"
     },
     {
       "name": "dbus",
@@ -261,7 +261,7 @@
     },
     {
       "name": "shared_preferences_android",
-      "rootUri": "file:///home/ilya/.pub-cache/hosted/pub.dev/shared_preferences_android-2.4.21",
+      "rootUri": "file:///home/ilya/.pub-cache/hosted/pub.dev/shared_preferences_android-2.4.22",
       "packageUri": "lib/",
       "languageVersion": "3.9"
     },

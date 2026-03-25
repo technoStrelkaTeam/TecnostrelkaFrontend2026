@@ -111,7 +111,7 @@
     },
     {
       "name": "cupertino_icons",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "dependencies": []
     },
     {
@@ -267,7 +267,7 @@
     },
     {
       "name": "shared_preferences_android",
-      "version": "2.4.21",
+      "version": "2.4.22",
       "dependencies": [
         "flutter",
         "shared_preferences_platform_interface"
