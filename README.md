@@ -68,7 +68,7 @@ flutter devices
 Android APK:
 
 ```bash
-flutter build apk
+flutter build apk --release
 ```
 
 Android App Bundle:
@@ -86,7 +86,7 @@ flutter build ios
 Web:
 
 ```bash
-flutter build web
+flutter build web --release
 ```
 
 Результаты сборки находятся в папке `build/`.
